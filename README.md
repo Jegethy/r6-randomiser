@@ -45,6 +45,13 @@ source → *Show* / *Hide*). Every time the source is shown, the overlay re-roll
 Re-rolls are ignored while a spin is in progress, so mashing the hotkey will not
 desync the two reels.
 
+### Driving it from Firebot
+
+If a channel point redemption should trigger the roll, see
+**[firebot/README.md](firebot/README.md)**. It covers both running the overlay
+as a Firebot Custom Widget (no OBS coupling) and keeping the browser source and
+having Firebot refresh it over obs-websocket.
+
 ### Why it re-rolls without a reload
 
 Neither browser-source checkbox reliably reloads the page when you toggle a

@@ -1,0 +1,131 @@
+<style>
+/* R6 Operator Randomiser - Firebot Custom Widget
+   Scoped to .r6 so it cannot leak into other overlay widgets. */
+.r6 {
+  --scale: 1;
+  --tile-h: calc(238px * var(--scale));
+  --emblem: calc(158px * var(--scale));
+  --stage-w: calc(400px * var(--scale));
+  --attack: #0dd1cb;
+  --defend: #ff9124;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.r6 canvas.r6-confetti {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 50;
+}
+.r6-stage { width: var(--stage-w); display: flex; flex-direction: column; align-items: stretch; }
+.r6-panel { display: flex; flex-direction: column; align-items: center; --accent: var(--attack); }
+.r6-panel[data-side="defend"] { --accent: var(--defend); }
+.r6-role {
+  font-size: calc(19px * var(--scale)); font-weight: 700;
+  letter-spacing: calc(4.5px * var(--scale)); text-transform: uppercase;
+  color: var(--accent); margin: calc(8px * var(--scale)) 0;
+  text-shadow: 0 0 calc(9px * var(--scale)) rgba(0,0,0,.95),
+               0 calc(2px * var(--scale)) calc(4px * var(--scale)) rgba(0,0,0,.9);
+}
+/* Fade tiles out at the window edges instead of letting overflow:hidden slice
+   them at a hard line, so a spinning reel reads as passing behind the edge.
+   Lifted on lock by scaling the same gradient (mask-size transitions, a
+   swapped gradient does not), keeping the winning emblem and glow crisp. */
+.r6-window {
+  width: 100%; height: var(--tile-h); overflow: hidden; position: relative;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-size: 100% 100%;    mask-size: 100% 100%;
+  transition: -webkit-mask-size .55s ease-out, mask-size .55s ease-out;
+}
+.r6-strip { will-change: transform; transform: translate3d(0,0,0); }
+.r6-strip.blurred { filter: blur(calc(2.4px * var(--scale))); }
+.r6-strip.unblur  { filter: blur(0); transition: filter .45s ease-out; }
+.r6-tile {
+  height: var(--tile-h); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: calc(12px * var(--scale));
+}
+.r6-emblem { width: var(--emblem); height: var(--emblem); display: flex; align-items: center; justify-content: center; }
+.r6-emblem img {
+  width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none;
+  filter: drop-shadow(0 calc(3px * var(--scale)) calc(9px * var(--scale)) rgba(0,0,0,.85));
+}
+.r6-name {
+  font-size: calc(38px * var(--scale)); font-weight: 800;
+  letter-spacing: calc(2px * var(--scale)); text-transform: uppercase;
+  color: #fff; text-align: center; line-height: 1.05;
+  text-shadow: 0 0 calc(10px * var(--scale)) rgba(0,0,0,.95),
+               0 calc(2px * var(--scale)) calc(5px * var(--scale)) rgba(0,0,0,.9);
+}
+.r6-divider { width: 100%; margin: calc(6px * var(--scale)) 0; line-height: 0; }
+.r6-divider svg {
+  width: 100%; height: calc(16px * var(--scale)); display: block;
+  filter: drop-shadow(0 calc(2px * var(--scale)) calc(3px * var(--scale)) rgba(0,0,0,.9));
+}
+.r6-divider path { fill: none; stroke: rgba(255,255,255,.9); stroke-width: 2.2; stroke-linecap: round; }
+
+/* reveal flourish */
+.r6-panel.locked .r6-window {
+  animation: r6shake .5s cubic-bezier(.36,.07,.19,.97) both;
+  -webkit-mask-size: 100% 460%;
+          mask-size: 100% 460%;
+}
+@keyframes r6shake {
+  10%,90% { transform: translate3d(calc(-2px * var(--scale)),0,0); }
+  20%,80% { transform: translate3d(calc(4px * var(--scale)),0,0); }
+  30%,50%,70% { transform: translate3d(calc(-8px * var(--scale)),0,0); }
+  40%,60% { transform: translate3d(calc(8px * var(--scale)),0,0); }
+}
+.r6-panel.locked .r6-window::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, var(--accent) 0%, transparent 70%);
+  animation: r6flash .55s ease-out both;
+}
+@keyframes r6flash {
+  0% { opacity: .55; transform: scale(.85); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+.r6-panel.locked .r6-tile.is-winner .r6-emblem { animation: r6pulse 1.9s ease-in-out infinite; }
+.r6-panel.locked .r6-tile.is-winner .r6-name   { animation: r6glow 1.9s ease-in-out infinite; }
+.r6-panel.locked .r6-role { animation: r6fade 1.9s ease-in-out infinite; }
+@keyframes r6pulse {
+  0%,100% { transform: scale(1);    filter: drop-shadow(0 0 calc(4px * var(--scale)) var(--accent)); }
+  50%     { transform: scale(1.06); filter: drop-shadow(0 0 calc(22px * var(--scale)) var(--accent)); }
+}
+@keyframes r6glow {
+  0%,100% { text-shadow: 0 0 calc(10px * var(--scale)) rgba(0,0,0,.95), 0 calc(2px * var(--scale)) calc(5px * var(--scale)) rgba(0,0,0,.9); }
+  50%     { text-shadow: 0 0 calc(10px * var(--scale)) rgba(0,0,0,.95), 0 0 calc(20px * var(--scale)) var(--accent); }
+}
+@keyframes r6fade { 0%,100% { opacity: .82; } 50% { opacity: 1; } }
+</style>
+
+<div class="r6">
+  <canvas class="r6-confetti"></canvas>
+  <div class="r6-stage">
+
+    <div class="r6-panel" data-side="defend">
+      <div class="r6-window"><div class="r6-strip" data-reel="defend"></div></div>
+      <div class="r6-role">Defense</div>
+    </div>
+
+    <div class="r6-divider">
+      <svg viewBox="0 0 300 16" preserveAspectRatio="none">
+        <path d="M0,8 Q7.5,1 15,8 T30,8 T45,8 T60,8 T75,8 T90,8 T105,8 T120,8 T135,8 T150,8 T165,8 T180,8 T195,8 T210,8 T225,8 T240,8 T255,8 T270,8 T285,8 T300,8"/>
+      </svg>
+    </div>
+
+    <div class="r6-panel" data-side="attack">
+      <div class="r6-role">Attack</div>
+      <div class="r6-window"><div class="r6-strip" data-reel="attack"></div></div>
+    </div>
+
+  </div>
+</div>

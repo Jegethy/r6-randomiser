@@ -27,7 +27,7 @@
     --emblem: calc(158px * var(--scale));
     --stage-w: calc(400px * var(--scale));
 
-    --attack: #3fa9ff;
+    --attack: #0dd1cb;
     --defend: #ff9124;
 
     --font: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
@@ -90,6 +90,22 @@
     height: var(--tile-h);
     overflow: hidden;
     position: relative;
+
+    /* Fade the tiles out at the top and bottom instead of letting
+       overflow:hidden slice them at a hard line, so a spinning reel reads as
+       passing behind the edge rather than vanishing into it.
+
+       The fade is removed once the reel locks (below) so the winning emblem
+       and its glow stay crisp. Rather than swap the gradient - which cannot
+       be transitioned - the same gradient is scaled up via mask-size, which
+       can. At 100% the soft bands sit inside the window; blown up to 460%
+       only the solid middle of the gradient covers it, so the fade is gone. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+    -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+    -webkit-mask-position: center;   mask-position: center;
+    -webkit-mask-size: 100% 100%;    mask-size: 100% 100%;
+    transition: -webkit-mask-size .55s ease-out, mask-size .55s ease-out;
   }
 
   .reel-strip {
@@ -158,8 +174,12 @@
 
   /* ---------------- reveal flourish ---------------- */
 
-  /* 1. shake the moment the reel locks */
-  .panel.locked .reel-window { animation: shake .5s cubic-bezier(.36, .07, .19, .97) both; }
+  /* 1. shake the moment the reel locks, and lift the edge fade */
+  .panel.locked .reel-window {
+    animation: shake .5s cubic-bezier(.36, .07, .19, .97) both;
+    -webkit-mask-size: 100% 460%;
+            mask-size: 100% 460%;
+  }
 
   @keyframes shake {
     10%, 90% { transform: translate3d(calc(-2px * var(--scale)), 0, 0); }
@@ -491,7 +511,7 @@
       const panel = panels[i];
       const r = panel.querySelector(".reel-window").getBoundingClientRect();
       const colors = panel.dataset.side === "attack"
-        ? ["#3fa9ff", "#8fd0ff", "#ffffff", "#1d6fd0"]
+        ? ["#0dd1cb", "#7fe8e5", "#ffffff", "#089b96"]
         : ["#ff9124", "#ffc97a", "#ffffff", "#e0620a"];
       burst(r.left + r.width / 2, r.top + r.height * 0.62, colors, 70);
     }
