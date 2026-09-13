@@ -35,8 +35,11 @@
 }
 /* Fade tiles out at the window edges instead of letting overflow:hidden slice
    them at a hard line, so a spinning reel reads as passing behind the edge.
-   Lifted on lock by scaling the same gradient (mask-size transitions, a
-   swapped gradient does not), keeping the winning emblem and glow crisp. */
+   Lifted on lock by scaling the same gradient up, keeping the winning emblem
+   and glow crisp. Do NOT add a transition to mask-size: Chrome does not
+   animate it, and merely declaring the transition pins the property at its
+   start value, which left the fade on when locked and made it look like it
+   arrived a beat into each spin. The switch is instant, hidden by the shake. */
 .r6-window {
   width: 100%; height: var(--tile-h); overflow: hidden; position: relative;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
@@ -44,7 +47,6 @@
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-size: 100% 100%;    mask-size: 100% 100%;
-  transition: -webkit-mask-size .55s ease-out, mask-size .55s ease-out;
 }
 .r6-strip { will-change: transform; transform: translate3d(0,0,0); }
 .r6-strip.blurred { filter: blur(calc(2.4px * var(--scale))); }

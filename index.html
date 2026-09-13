@@ -96,16 +96,20 @@
        passing behind the edge rather than vanishing into it.
 
        The fade is removed once the reel locks (below) so the winning emblem
-       and its glow stay crisp. Rather than swap the gradient - which cannot
-       be transitioned - the same gradient is scaled up via mask-size, which
-       can. At 100% the soft bands sit inside the window; blown up to 460%
-       only the solid middle of the gradient covers it, so the fade is gone. */
+       and its glow stay crisp. That is done by scaling this same gradient via
+       mask-size: at 100% the soft bands sit inside the window, blown up to
+       460% only the solid middle covers it, so the fade is gone.
+
+       Do NOT add a transition to mask-size to ease that switch. Chrome does
+       not animate mask-size - it creates no transition at all (getAnimations
+       reports none) and instead pins the property at its start value, so the
+       fade stayed on when locked and only appeared to arrive a beat into each
+       spin. The switch is instant, under cover of the shake and flash. */
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
             mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
     -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
     -webkit-mask-position: center;   mask-position: center;
     -webkit-mask-size: 100% 100%;    mask-size: 100% 100%;
-    transition: -webkit-mask-size .55s ease-out, mask-size .55s ease-out;
   }
 
   .reel-strip {
