@@ -31,15 +31,35 @@ your gameplay capture with no keying or blend mode needed.
 
 ## Rolling again
 
+**Bind an OBS hotkey to the source's visibility** (Settings → Hotkeys → find the
+source → *Show* / *Hide*). Every time the source is shown, the overlay re-rolls.
+
 | Trigger | Notes |
 | --- | --- |
-| Page load | Default. This is what the OBS visibility toggle uses. |
+| Source shown in OBS | The intended stream workflow. |
+| Page load | Covers a genuine reload or scene refresh. |
 | Click | Anywhere on the overlay (needs **Interact**). |
 | `Space`, `Enter` or `R` | Needs **Interact**. |
 | `window.roll()` | For a custom browser dock or script. |
 
 Re-rolls are ignored while a spin is in progress, so mashing the hotkey will not
 desync the two reels.
+
+### Why it re-rolls without a reload
+
+Neither browser-source checkbox reliably reloads the page when you toggle a
+source's eye icon:
+
+- **Refresh browser when scene becomes active** fires only on a *scene* switch,
+  not on a source visibility toggle within the current scene.
+- **Shutdown source when not visible** only counts the source as hidden when it
+  is hidden *everywhere* — it stays alive if it is in the Studio Mode preview,
+  in another active scene, or while its Properties dialog is open.
+
+So the overlay does not rely on a reload. It listens for the
+`obsSourceVisibleChanged` and `obsSourceActiveChanged` events that OBS
+dispatches on the page itself, which fire on a visibility toggle regardless of
+those settings. Leaving both boxes ticked is fine and costs nothing.
 
 ## Options
 

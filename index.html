@@ -534,6 +534,34 @@
     }
   });
 
+  /* -------------------------------------------------------------
+     OBS: re-roll every time the source is shown again.
+
+     Neither browser-source checkbox reliably reloads the page when
+     you toggle a source's visibility: "Refresh browser when scene
+     becomes active" only fires on a scene switch, and "Shutdown
+     source when not visible" keeps the source alive while it is
+     still shown anywhere (Studio Mode preview, the properties
+     dialog, another scene). OBS does however dispatch these events
+     on the page itself, so hooking them makes a visibility hotkey
+     re-roll whether or not the page ever reloads.
+
+     roll() ignores calls while a spin is running, so overlapping
+     triggers (event + reload autostart) collapse into one roll.
+     ------------------------------------------------------------- */
+  window.addEventListener("obsSourceVisibleChanged", function (e) {
+    if (e.detail && e.detail.visible) roll();
+  });
+  window.addEventListener("obsSourceActiveChanged", function (e) {
+    if (e.detail && e.detail.active) roll();
+  });
+
+  // Fallback for anything that backgrounds the page instead (and for
+  // plain browsers): re-roll when it comes back to the foreground.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) roll();
+  });
+
   /* =============================================================
      7. Preload, then go
      ============================================================= */
