@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R6 Operator Randomiser</title>
+<style>
+  /* ---------------------------------------------------------------
+     Transparent stream overlay. Nothing here may paint a background.
+
+     Layout follows the reference: a vertical stack with the Defender
+     section on top and the Attacker section below, each reading
+     emblem -> name -> role label, split by a wavy divider. The centre
+     text from the reference is intentionally absent.
+     --------------------------------------------------------------- */
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: transparent;   /* OBS keys this out */
+    overflow: hidden;
+  }
+
+  :root {
+    --scale: 1;
+    --tile-h: calc(238px * var(--scale));
+    --emblem: calc(158px * var(--scale));
+    --stage-w: calc(400px * var(--scale));
+
+    --attack: #3fa9ff;
+    --defend: #ff9124;
+
+    --font: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+  }
+
+  #confetti {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  .stage {
+    width: var(--stage-w);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* ---------------- panel ---------------- */
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    --accent: var(--attack);
+  }
+  .panel[data-side="defend"] { --accent: var(--defend); }
+
+  /* Role label sits against the divider on both sides: below the name
+     for the Defender on top, above the emblem for the Attacker below. */
+  .role {
+    font-size: calc(19px * var(--scale));
+    font-weight: 700;
+    letter-spacing: calc(4.5px * var(--scale));
+    text-transform: uppercase;
+    color: var(--accent);
+    text-shadow:
+      0 0 calc(9px * var(--scale)) rgba(0, 0, 0, .95),
+      0 calc(2px * var(--scale)) calc(4px * var(--scale)) rgba(0, 0, 0, .9);
+    margin: calc(8px * var(--scale)) 0;
+  }
+
+  /* ---------------- reel ---------------- */
+
+  .reel-window {
+    width: 100%;
+    height: var(--tile-h);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .reel-strip {
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+  .reel-strip.blurred { filter: blur(calc(2.4px * var(--scale))); }
+  .reel-strip.unblur  { filter: blur(0); transition: filter .45s ease-out; }
+
+  .tile {
+    height: var(--tile-h);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(12px * var(--scale));
+  }
+
+  .emblem {
+    width: var(--emblem);
+    height: var(--emblem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .emblem img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    -webkit-user-drag: none;
+    filter: drop-shadow(0 calc(3px * var(--scale)) calc(9px * var(--scale)) rgba(0, 0, 0, .85));
+  }
+
+  .op-name {
+    font-size: calc(38px * var(--scale));
+    font-weight: 800;
+    letter-spacing: calc(2px * var(--scale));
+    text-transform: uppercase;
+    color: #fff;
+    text-align: center;
+    line-height: 1.05;
+    text-shadow:
+      0 0 calc(10px * var(--scale)) rgba(0, 0, 0, .95),
+      0 calc(2px * var(--scale)) calc(5px * var(--scale)) rgba(0, 0, 0, .9);
+  }
+
+  /* ---------------- wavy divider (centre text removed) ---------------- */
+
+  .divider {
+    width: 100%;
+    margin: calc(6px * var(--scale)) 0;
+    line-height: 0;
+  }
+  .divider svg {
+    width: 100%;
+    height: calc(16px * var(--scale));
+    display: block;
+    filter: drop-shadow(0 calc(2px * var(--scale)) calc(3px * var(--scale)) rgba(0, 0, 0, .9));
+  }
+  .divider path {
+    fill: none;
+    stroke: rgba(255, 255, 255, .9);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+  }
+
+  /* ---------------- reveal flourish ---------------- */
+
+  /* 1. shake the moment the reel locks */
+  .panel.locked .reel-window { animation: shake .5s cubic-bezier(.36, .07, .19, .97) both; }
+
+  @keyframes shake {
+    10%, 90% { transform: translate3d(calc(-2px * var(--scale)), 0, 0); }
+    20%, 80% { transform: translate3d(calc(4px * var(--scale)), 0, 0); }
+    30%, 50%, 70% { transform: translate3d(calc(-8px * var(--scale)), 0, 0); }
+    40%, 60% { transform: translate3d(calc(8px * var(--scale)), 0, 0); }
+  }
+
+  /* 2. accent flash sweeping out from the locked result */
+  .panel.locked .reel-window::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, var(--accent) 0%, transparent 70%);
+    opacity: 0;
+    animation: flash .55s ease-out both;
+    pointer-events: none;
+  }
+  @keyframes flash {
+    0%   { opacity: .55; transform: scale(.85); }
+    100% { opacity: 0;   transform: scale(1.25); }
+  }
+
+  /* 3. continuous pulse — scoped to the landed tile only, so the other
+        ~200 tiles still in the strip cost nothing to animate */
+  .panel.locked .tile.is-winner .emblem  { animation: pulse-emblem 1.9s ease-in-out infinite; }
+  .panel.locked .tile.is-winner .op-name { animation: pulse-name 1.9s ease-in-out infinite; }
+  .panel.locked .role                    { animation: pulse-role 1.9s ease-in-out infinite; }
+
+  @keyframes pulse-emblem {
+    0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 calc(4px * var(--scale)) var(--accent)); }
+    50%      { transform: scale(1.06); filter: drop-shadow(0 0 calc(22px * var(--scale)) var(--accent)); }
+  }
+  @keyframes pulse-name {
+    0%, 100% { text-shadow: 0 0 calc(10px * var(--scale)) rgba(0,0,0,.95), 0 calc(2px * var(--scale)) calc(5px * var(--scale)) rgba(0,0,0,.9); }
+    50%      { text-shadow: 0 0 calc(10px * var(--scale)) rgba(0,0,0,.95), 0 0 calc(20px * var(--scale)) var(--accent); }
+  }
+  @keyframes pulse-role {
+    0%, 100% { opacity: .82; }
+    50%      { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel.locked .reel-window,
+    .panel.locked .tile.is-winner .emblem,
+    .panel.locked .tile.is-winner .op-name,
+    .panel.locked .role { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="confetti"></canvas>
+
+<div class="stage">
+
+  <!-- Defender on top, matching the reference -->
+  <section class="panel" data-side="defend">
+    <div class="reel-window"><div class="reel-strip" id="reel-defend"></div></div>
+    <div class="role">Defense</div>
+  </section>
+
+  <div class="divider" aria-hidden="true">
+    <svg viewBox="0 0 300 16" preserveAspectRatio="none">
+      <path d="M0,8 Q7.5,1 15,8 T30,8 T45,8 T60,8 T75,8 T90,8 T105,8 T120,8 T135,8 T150,8 T165,8 T180,8 T195,8 T210,8 T225,8 T240,8 T255,8 T270,8 T285,8 T300,8"/>
+    </svg>
+  </div>
+
+  <!-- Attacker below -->
+  <section class="panel" data-side="attack">
+    <div class="role">Attack</div>
+    <div class="reel-window"><div class="reel-strip" id="reel-attack"></div></div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =============================================================
+     1. Roster
+     ============================================================= */
+
+  // [asset basename, display name]
+  const ATTACKERS = [
+    ["sledge","Sledge"],["thatcher","Thatcher"],["ash","Ash"],["thermite","Thermite"],
+    ["twitch","Twitch"],["montagne","Montagne"],["glaz","Glaz"],["fuze","Fuze"],
+    ["blitz","Blitz"],["iq","IQ"],["buck","Buck"],["blackbeard","Blackbeard"],
+    ["capitao","Capitão"],["hibana","Hibana"],["jackal","Jackal"],["ying","Ying"],
+    ["zofia","Zofia"],["dokkaebi","Dokkaebi"],["lion","Lion"],["finka","Finka"],
+    ["maverick","Maverick"],["nomad","Nomad"],["gridlock","Gridlock"],["nokk","Nøkk"],
+    ["amaru","Amaru"],["kali","Kali"],["iana","Iana"],["ace","Ace"],
+    ["zero","Zero"],["flores","Flores"],["osa","Osa"],["sens","Sens"],
+    ["grim","Grim"],["brava","Brava"],["ram","Ram"],["deimos","Deimos"],
+    ["striker","Striker"],["rauora","Rauora"]
+  ];
+
+  const DEFENDERS = [
+    ["smoke","Smoke"],["mute","Mute"],["castle","Castle"],["pulse","Pulse"],
+    ["doc","Doc"],["rook","Rook"],["jager","Jäger"],["bandit","Bandit"],
+    ["tachanka","Tachanka"],["kapkan","Kapkan"],["frost","Frost"],["valkyrie","Valkyrie"],
+    ["caveira","Caveira"],["echo","Echo"],["mira","Mira"],["lesion","Lesion"],
+    ["ela","Ela"],["vigil","Vigil"],["alibi","Alibi"],["maestro","Maestro"],
+    ["clash","Clash"],["kaid","Kaid"],["mozzie","Mozzie"],["warden","Warden"],
+    ["goyo","Goyo"],["wamai","Wamai"],["oryx","Oryx"],["melusi","Melusi"],
+    ["aruni","Aruni"],["thunderbird","Thunderbird"],["thorn","Thorn"],["azami","Azami"],
+    ["solis","Solis"],["fenrir","Fenrir"],["tubarao","Tubarão"],["sentry","Sentry"],
+    ["skopos","Skopós"],["denari","Denari"]
+  ];
+
+  // Legacy Recruit variants - historically playable on both sides.
+  // Off by default; enable with ?recruits=1
+  const RECRUITS = [
+    ["recruit_blue","Recruit"],["recruit_green","Recruit"],["recruit_orange","Recruit"],
+    ["recruit_red","Recruit"],["recruit_yellow","Recruit"]
+  ];
+
+  /* =============================================================
+     2. Options (all overridable from the OBS browser-source URL)
+     ============================================================= */
+
+  const qs = new URLSearchParams(location.search);
+  const num = function (key, dflt) {
+    const v = parseFloat(qs.get(key));
+    return Number.isFinite(v) ? v : dflt;
+  };
+  const flag = function (key, dflt) {
+    const v = qs.get(key);
+    if (v === null) return dflt;
+    return v !== "0" && v !== "false";
+  };
+
+  const OPT = {
+    scale:     num("scale", 1),
+    spin:      num("spin", 4200),    // first reel duration, ms
+    stagger:   num("stagger", 900),  // attacker lands this much later
+    autostart: flag("auto", true),
+    confetti:  flag("confetti", true),
+    recruits:  flag("recruits", false),
+    format:    (qs.get("fmt") || "svg").toLowerCase() === "png" ? "png" : "svg"
+  };
+
+  document.documentElement.style.setProperty("--scale", OPT.scale);
+
+  const ASSET_DIR = OPT.format === "png"
+    ? "High-resolution PNG"
+    : "Scalable vector graphic (SVG)";
+
+  function assetUrl(base) {
+    return encodeURIComponent(ASSET_DIR) + "/" +
+           encodeURIComponent(base) + "." + OPT.format;
+  }
+
+  const attackPool = OPT.recruits ? ATTACKERS.concat(RECRUITS) : ATTACKERS.slice();
+  const defendPool = OPT.recruits ? DEFENDERS.concat(RECRUITS) : DEFENDERS.slice();
+
+  /* =============================================================
+     3. Randomness
+
+     Every draw comes from the CSPRNG. Rejection sampling removes the
+     modulo bias, so each operator is exactly equally likely. There is
+     no seed and no stored state, so no outcome can be predetermined.
+     ============================================================= */
+
+  const cryptoObj = window.crypto || window.msCrypto;
+
+  function randomInt(max) {
+    if (max <= 1) return 0;
+    if (cryptoObj && cryptoObj.getRandomValues) {
+      const RANGE = 4294967296;                 // 2^32
+      const limit = Math.floor(RANGE / max) * max;
+      const buf = new Uint32Array(1);
+      let v;
+      do { cryptoObj.getRandomValues(buf); v = buf[0]; } while (v >= limit);
+      return v % max;
+    }
+    return Math.floor(Math.random() * max);     // only if crypto is unavailable
+  }
+
+  function pick(arr) { return arr[randomInt(arr.length)]; }
+
+  function shuffled(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1);
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  /* =============================================================
+     4. Reel
+     ============================================================= */
+
+  const LOOPS = 5;   // full passes of the roster before the result
+
+  function tileHtml(op) {
+    return '<div class="tile">' +
+             '<div class="emblem"><img src="' + assetUrl(op[0]) + '" alt="" draggable="false"></div>' +
+             '<div class="op-name">' + op[1] + '</div>' +
+           '</div>';
+  }
+
+  function Reel(stripId, pool) {
+    const strip = document.getElementById(stripId);
+    const win   = strip.parentElement;
+    const panel = win.closest(".panel");
+
+    this.spin = function (duration, onDone) {
+      const winner = pick(pool);
+
+      // Build the strip: several shuffled passes, the winner, then a
+      // short tail so the window never scrolls past the content.
+      const tiles = [];
+      for (let i = 0; i < LOOPS; i++) tiles.push.apply(tiles, shuffled(pool));
+      const winnerIndex = tiles.length;
+      tiles.push(winner);
+      tiles.push.apply(tiles, shuffled(pool).slice(0, 4));
+
+      panel.classList.remove("locked");
+      strip.classList.remove("unblur");
+      strip.style.transition = "none";
+      strip.style.transform  = "translate3d(0,0,0)";
+      strip.innerHTML = tiles.map(tileHtml).join("");
+
+      // Measure after the new tiles are laid out so the landing offset
+      // matches the rendered tile height exactly at any scale.
+      const tileH = win.getBoundingClientRect().height;
+      void strip.offsetHeight;                  // force reflow before transition
+
+      strip.classList.add("blurred");
+      strip.style.transition = "transform " + duration + "ms cubic-bezier(.16,.86,.2,1)";
+      strip.style.transform  = "translate3d(0," + (-winnerIndex * tileH) + "px,0)";
+
+      // Ease the motion blur off as the reel slows.
+      setTimeout(function () {
+        strip.classList.remove("blurred");
+        strip.classList.add("unblur");
+      }, Math.max(0, duration - 1100));
+
+      let settled = false;
+      const settle = function (e) {
+        if (e && e.propertyName !== "transform") return;
+        if (settled) return;
+        settled = true;
+        strip.removeEventListener("transitionend", settle);
+        const landed = strip.children[winnerIndex];
+        if (landed) landed.classList.add("is-winner");
+        panel.classList.add("locked");
+        onDone(winner, panel);
+      };
+      strip.addEventListener("transitionend", settle);
+      setTimeout(settle, duration + 250);       // fallback if transitionend is missed
+    };
+  }
+
+  const reelAttack = new Reel("reel-attack", attackPool);
+  const reelDefend = new Reel("reel-defend", defendPool);
+
+  /* =============================================================
+     5. Confetti (self-contained, no external dependency)
+     ============================================================= */
+
+  const canvas = document.getElementById("confetti");
+  const ctx = canvas.getContext("2d");
+  let particles = [];
+  let rafId = null;
+
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeCanvas();
+  window.addEventListener("resize", sizeCanvas);
+
+  function burst(x, y, colors, count) {
+    for (let i = 0; i < count; i++) {
+      const angle = (-Math.PI / 2) + (Math.random() - 0.5) * 1.9;
+      const speed = 7 + Math.random() * 11;
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        w: 5 + Math.random() * 6,
+        h: 8 + Math.random() * 8,
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.32,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 1
+      });
+    }
+    if (!rafId) rafId = requestAnimationFrame(tick);
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.vy += 0.34;          // gravity
+      p.vx *= 0.992;         // drag
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.life -= 0.0075;
+
+      if (p.life <= 0 || p.y - 40 > window.innerHeight) {
+        particles.splice(i, 1);
+        continue;
+      }
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    rafId = particles.length ? requestAnimationFrame(tick) : null;
+    if (!rafId) ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  }
+
+  function celebrate() {
+    if (!OPT.confetti) return;
+    const panels = document.querySelectorAll(".panel");
+    for (let i = 0; i < panels.length; i++) {
+      const panel = panels[i];
+      const r = panel.querySelector(".reel-window").getBoundingClientRect();
+      const colors = panel.dataset.side === "attack"
+        ? ["#3fa9ff", "#8fd0ff", "#ffffff", "#1d6fd0"]
+        : ["#ff9124", "#ffc97a", "#ffffff", "#e0620a"];
+      burst(r.left + r.width / 2, r.top + r.height * 0.62, colors, 70);
+    }
+  }
+
+  /* =============================================================
+     6. Orchestration
+     ============================================================= */
+
+  let spinning = false;
+
+  function roll() {
+    if (spinning) return;
+    spinning = true;
+
+    particles = [];
+    const panels = document.querySelectorAll(".panel");
+    for (let i = 0; i < panels.length; i++) panels[i].classList.remove("locked");
+
+    let remaining = 2;
+    const done = function () {
+      if (--remaining === 0) {
+        spinning = false;
+        celebrate();
+      }
+    };
+
+    // Defender lands first (top of the stack), then the Attacker.
+    reelDefend.spin(OPT.spin, done);
+    reelAttack.spin(OPT.spin + OPT.stagger, done);
+  }
+
+  window.roll = roll;   // callable from an OBS browser-source interaction
+
+  document.addEventListener("click", roll);
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.code === "Enter" || e.code === "KeyR") {
+      e.preventDefault();
+      roll();
+    }
+  });
+
+  /* =============================================================
+     7. Preload, then go
+     ============================================================= */
+
+  function preload(done) {
+    const all = attackPool.concat(defendPool);
+    let left = all.length;
+    if (!left) return done();
+    let finished = false;
+    const step = function () {
+      if (!finished && --left <= 0) { finished = true; done(); }
+    };
+    all.forEach(function (op) {
+      const img = new Image();
+      img.onload = img.onerror = step;
+      img.src = assetUrl(op[0]);
+    });
+    // Never let a slow or missing asset stall the overlay.
+    setTimeout(function () {
+      if (!finished) { finished = true; done(); }
+    }, 4000);
+  }
+
+  preload(function () {
+    if (OPT.autostart) roll();
+  });
+})();
+</script>
+</body>
+</html>
